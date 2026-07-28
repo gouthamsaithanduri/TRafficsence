@@ -1,0 +1,159 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Traffic Survey · TrafficSense AI</title>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="css/style.css" />
+</head>
+<body>
+<div id="app-shell"></div>
+
+<template id="page-tpl">
+  <div class="card mb-3">
+    <div class="section-title"><h2>Survey Session</h2></div>
+    <div class="form-row">
+      <div class="form-group">
+        <label>Road</label>
+        <select id="roadSel" class="form-control"></select>
+      </div>
+      <div class="form-group">
+        <label>Time Period</label>
+        <select id="period" class="form-control">
+          <option>Morning</option><option>Afternoon</option><option>Evening</option><option>Night</option>
+        </select>
+      </div>
+      <div class="form-group"><label>Date</label><input type="date" id="date" class="form-control" /></div>
+    </div>
+    <div class="flex gap-2 mt-2" style="flex-wrap:wrap;">
+      <button id="save" class="btn btn-primary">💾 Save Survey</button>
+      <button id="reset" class="btn">↺ Reset Counters</button>
+      <label class="btn">📥 Import CSV/Excel<input id="import" type="file" accept=".csv,.xlsx,.xls" hidden /></label>
+    </div>
+  </div>
+
+  <div class="card mb-3">
+    <div class="section-title"><h2>Live Counters</h2>
+      <div>Total: <b id="totalCount" style="font-size:1.4rem;color:var(--primary);">0</b> · PCU: <b id="pcuCount" style="color:var(--accent);">0</b></div>
+    </div>
+    <div class="veh-grid" id="vehGrid"></div>
+  </div>
+
+  <div class="card">
+    <div class="section-title"><h2>Recent Surveys</h2></div>
+    <table class="table">
+      <thead><tr><th>Date</th><th>Road</th><th>Period</th><th>Cars</th><th>2W</th><th>Bus</th><th>Truck</th><th>Rickshaw</th><th>Bike</th><th>PCU</th></tr></thead>
+      <tbody id="surveyRows"></tbody>
+    </table>
+  </div>
+</template>
+
+<script src="js/auth.js"></script><script src="js/app.js"></script><script src="js/shell.js"></script>
+<script>
+Auth.requireAuth();
+buildShell({ title: "Traffic Survey", subtitle: "Manual counting or import from CSV/Excel", active: "traffic-survey.html", content: document.getElementById("page-tpl").innerHTML });
+
+const roads = TSAI.getRoads();
+document.getElementById("roadSel").innerHTML = roads.map(r => `<option value="${r.id}">${r.road} — ${r.project}</option>`).join("");
+document.getElementById("date").value = new Date().toISOString().slice(0, 10);
+
+const VEHS = [
+  { key: "cars", name: "Cars", ico: "🚗" },
+  { key: "motorcycles", name: "Motorcycles", ico: "🏍️" },
+  { key: "buses", name: "Buses", ico: "🚌" },
+  { key: "trucks", name: "Trucks", ico: "🚛" },
+  { key: "rickshaws", name: "Auto Rickshaws", ico: "🛺" },
+  { key: "bicycles", name: "Bicycles", ico: "🚲" },
+];
+const counts = Object.fromEntries(VEHS.map(v => [v.key, 0]));
+
+const grid = document.getElementById("vehGrid");
+grid.innerHTML = VEHS.map(v => `
+  <div class="veh-card">
+    <div class="ico">${v.ico}</div>
+    <div class="name">${v.name}</div>
+    <div class="count" id="c-${v.key}">0</div>
+    <div class="veh-btns">
+      <button data-k="${v.key}" data-d="-1">−</button>
+      <button data-k="${v.key}" data-d="1">+</button>
+    </div>
+  </div>`).join("");
+
+function refreshTotals() {
+  const total = Object.values(counts).reduce((a, b) => a + b, 0);
+  document.getElementById("totalCount").textContent = total.toLocaleString();
+  document.getElementById("pcuCount").textContent = TSAI.surveyPCU(counts).toLocaleString();
+}
+grid.addEventListener("click", (e) => {
+  const b = e.target.closest("button[data-k]"); if (!b) return;
+  const k = b.dataset.k; counts[k] = Math.max(0, counts[k] + (+b.dataset.d));
+  document.getElementById("c-" + k).textContent = counts[k];
+  refreshTotals();
+});
+
+document.getElementById("reset").onclick = () => {
+  VEHS.forEach(v => { counts[v.key] = 0; document.getElementById("c-" + v.key).textContent = "0"; });
+  refreshTotals();
+};
+
+document.getElementById("save").onclick = () => {
+  const total = Object.values(counts).reduce((a, b) => a + b, 0);
+  if (total === 0) { UI.toast("Count at least one vehicle first.", "warn"); return; }
+  const survey = {
+    id: Date.now(),
+    roadId: +document.getElementById("roadSel").value,
+    date: document.getElementById("date").value,
+    period: document.getElementById("period").value,
+    ...counts,
+  };
+  const all = TSAI.getSurveys(); all.push(survey); TSAI.saveSurveys(all);
+  UI.toast("Survey saved.", "success");
+  document.getElementById("reset").click();
+  renderRows();
+};
+
+function renderRows() {
+  const rs = TSAI.getRoads();
+  const map = Object.fromEntries(rs.map(r => [r.id, r.road]));
+  document.getElementById("surveyRows").innerHTML = TSAI.getSurveys().slice().reverse().map(s => `
+    <tr><td>${s.date}</td><td>${map[s.roadId] || "—"}</td><td>${s.period}</td>
+    <td>${s.cars}</td><td>${s.motorcycles}</td><td>${s.buses}</td><td>${s.trucks}</td>
+    <td>${s.rickshaws}</td><td>${s.bicycles}</td><td><b>${TSAI.surveyPCU(s)}</b></td></tr>
+  `).join("");
+}
+renderRows();
+
+document.getElementById("import").addEventListener("change", (e) => {
+  const f = e.target.files[0]; if (!f) return;
+  const reader = new FileReader();
+  reader.onload = () => {
+    // CSV import (basic)
+    try {
+      const lines = String(reader.result).split(/\r?\n/).filter(Boolean);
+      const [header, ...rows] = lines;
+      const keys = header.split(",").map(k => k.trim().toLowerCase());
+      let n = 0;
+      const all = TSAI.getSurveys();
+      rows.forEach(line => {
+        const cells = line.split(",");
+        const obj = {}; keys.forEach((k, i) => obj[k] = cells[i]);
+        all.push({
+          id: Date.now() + n++,
+          roadId: +document.getElementById("roadSel").value,
+          date: obj.date || new Date().toISOString().slice(0, 10),
+          period: obj.period || "Morning",
+          cars: +obj.cars || 0, motorcycles: +obj.motorcycles || 0,
+          buses: +obj.buses || 0, trucks: +obj.trucks || 0,
+          rickshaws: +obj.rickshaws || 0, bicycles: +obj.bicycles || 0,
+        });
+      });
+      TSAI.saveSurveys(all);
+      UI.toast(`${n} rows imported.`, "success"); renderRows();
+    } catch (err) { UI.toast("Could not parse file (expect CSV).", "error"); }
+  };
+  reader.readAsText(f);
+});
+</script>
+</body>
+</html>

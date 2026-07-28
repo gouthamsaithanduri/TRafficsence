@@ -1,0 +1,74 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Peak Demand · TrafficSense AI</title>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="css/style.css" />
+</head>
+<body>
+<div id="app-shell"></div>
+<template id="page-tpl">
+  <div class="kpi-grid mb-3">
+    <div class="card kpi warn"><span class="ico">🌅</span><div class="label">Morning Peak</div><div class="value" id="am">—</div><div class="delta" id="amv">—</div></div>
+    <div class="card kpi bad"><span class="ico">🌆</span><div class="label">Evening Peak</div><div class="value" id="pm">—</div><div class="delta" id="pmv">—</div></div>
+    <div class="card kpi"><span class="ico">🚀</span><div class="label">Highest Demand</div><div class="value" id="hi">—</div><div class="delta" id="hiv">—</div></div>
+    <div class="card kpi accent"><span class="ico">🌙</span><div class="label">Lowest Demand</div><div class="value" id="lo">—</div><div class="delta" id="lov">—</div></div>
+  </div>
+
+  <div class="grid g-2-eq">
+    <div class="card">
+      <div class="section-title"><h2>Hourly Demand Curve</h2></div>
+      <div class="chart-wrap"><canvas id="line"></canvas></div>
+    </div>
+    <div class="card">
+      <div class="section-title"><h2>Peak Comparison</h2></div>
+      <div class="chart-wrap"><canvas id="bar"></canvas></div>
+    </div>
+  </div>
+</template>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+<script src="js/auth.js"></script><script src="js/app.js"></script><script src="js/shell.js"></script>
+<script>
+Auth.requireAuth();
+buildShell({ title: "Peak Demand Analysis", subtitle: "Morning, evening peaks and demand distribution", active: "peak-demand.html", content: document.getElementById("page-tpl").innerHTML });
+
+const hourly = TSAI.hourlyCurve(2000, 1.4);
+const amRange = hourly.slice(6, 11);
+const pmRange = hourly.slice(16, 21);
+const amPeakVal = Math.max(...amRange), amHour = 6 + amRange.indexOf(amPeakVal);
+const pmPeakVal = Math.max(...pmRange), pmHour = 16 + pmRange.indexOf(pmPeakVal);
+const hi = Math.max(...hourly), hiH = hourly.indexOf(hi);
+const lo = Math.min(...hourly), loH = hourly.indexOf(lo);
+
+document.getElementById("am").textContent = amHour + ":00";
+document.getElementById("amv").textContent = amPeakVal.toLocaleString() + " veh/hr";
+document.getElementById("pm").textContent = pmHour + ":00";
+document.getElementById("pmv").textContent = pmPeakVal.toLocaleString() + " veh/hr";
+document.getElementById("hi").textContent = hiH + ":00";
+document.getElementById("hiv").textContent = hi.toLocaleString() + " veh/hr";
+document.getElementById("lo").textContent = loH + ":00";
+document.getElementById("lov").textContent = lo.toLocaleString() + " veh/hr";
+
+applyChartTheme();
+new Chart(document.getElementById("line"), {
+  type: "line",
+  data: { labels: [...Array(24).keys()].map(h=>h+":00"),
+    datasets: [{ label: "Volume", data: hourly, borderColor: "#1e63ff", backgroundColor: "rgba(30,99,255,.15)", fill: true, tension: .4, borderWidth: 2.5, pointRadius: 0 }] },
+  options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } } }
+});
+new Chart(document.getElementById("bar"), {
+  type: "bar",
+  data: { labels: ["Morning","Afternoon","Evening","Night"],
+    datasets: [{ label: "Avg volume", data: [
+      Math.round(hourly.slice(6,12).reduce((a,b)=>a+b,0)/6),
+      Math.round(hourly.slice(12,16).reduce((a,b)=>a+b,0)/4),
+      Math.round(hourly.slice(16,21).reduce((a,b)=>a+b,0)/5),
+      Math.round((hourly.slice(21,24).concat(hourly.slice(0,6))).reduce((a,b)=>a+b,0)/9)
+    ], backgroundColor: ["#f59e0b","#22d3ee","#ef4444","#94a3b8"], borderRadius: 10 }] },
+  options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } } }
+});
+</script>
+</body>
+</html>

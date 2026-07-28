@@ -1,0 +1,101 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Profile · TrafficSense AI</title>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="css/style.css" />
+</head>
+<body>
+<div id="app-shell"></div>
+<template id="page-tpl">
+  <div class="grid g-2">
+    <div class="card" style="text-align:center;">
+      <div class="avatar" id="bigAvatar" style="width:96px;height:96px;margin:8px auto 12px;font-size:32px;"></div>
+      <img id="pic" style="display:none;width:96px;height:96px;border-radius:50%;object-fit:cover;margin:8px auto 12px;" />
+      <h2 id="pName" style="margin:0;">—</h2>
+      <p class="text-soft" id="pEmail">—</p>
+      <label class="btn mt-2">📷 Change photo<input id="upload" type="file" accept="image/*" hidden /></label>
+    </div>
+
+    <div class="card">
+      <div class="section-title"><h2>Edit Profile</h2></div>
+      <form id="profileForm">
+        <div class="form-group"><label>Full name</label><input class="form-control" id="fullName" required /></div>
+        <div class="form-row">
+          <div class="form-group"><label>Username</label><input class="form-control" id="username" disabled /></div>
+          <div class="form-group"><label>Mobile</label><input class="form-control" id="mobile" required /></div>
+        </div>
+        <div class="form-group"><label>Email</label><input class="form-control" id="email" disabled /></div>
+        <button class="btn btn-primary mt-2" type="submit">Save changes</button>
+      </form>
+
+      <hr style="border:none;border-top:1px solid var(--border);margin:24px 0;" />
+
+      <div class="section-title"><h2>Change Password</h2></div>
+      <form id="pwForm">
+        <div class="form-group"><label>Current password</label><input type="password" class="form-control" id="oldPw" required /></div>
+        <div class="form-row">
+          <div class="form-group"><label>New password</label><input type="password" class="form-control" id="newPw" required /></div>
+          <div class="form-group"><label>Confirm</label><input type="password" class="form-control" id="confPw" required /></div>
+        </div>
+        <button class="btn btn-primary mt-2" type="submit">Update password</button>
+      </form>
+    </div>
+  </div>
+</template>
+
+<script src="js/auth.js"></script><script src="js/app.js"></script><script src="js/shell.js"></script>
+<script>
+Auth.requireAuth();
+buildShell({ title:"Profile", subtitle:"Manage your account", active:"", content: document.getElementById("page-tpl").innerHTML });
+
+const s = Auth.session();
+const initials = (s.fullName || s.username).split(/\s+/).map(w=>w[0]).slice(0,2).join("").toUpperCase();
+document.getElementById("bigAvatar").textContent = initials;
+document.getElementById("pName").textContent = s.fullName;
+document.getElementById("pEmail").textContent = s.email;
+document.getElementById("fullName").value = s.fullName;
+document.getElementById("username").value = s.username;
+document.getElementById("mobile").value = s.mobile || "";
+document.getElementById("email").value = s.email;
+
+const savedPic = localStorage.getItem("tsai_pic_" + s.email);
+if (savedPic) { document.getElementById("pic").src = savedPic; document.getElementById("pic").style.display="block"; document.getElementById("bigAvatar").style.display="none"; }
+
+document.getElementById("upload").onchange = (e) => {
+  const f = e.target.files[0]; if (!f) return;
+  const r = new FileReader();
+  r.onload = () => {
+    localStorage.setItem("tsai_pic_" + s.email, r.result);
+    document.getElementById("pic").src = r.result; document.getElementById("pic").style.display="block";
+    document.getElementById("bigAvatar").style.display="none";
+    UI.toast("Photo updated.","success");
+  };
+  r.readAsDataURL(f);
+};
+
+document.getElementById("profileForm").addEventListener("submit", (e) => {
+  e.preventDefault();
+  const res = Auth.updateProfile({ fullName: document.getElementById("fullName").value.trim(), mobile: document.getElementById("mobile").value.trim() });
+  if (!res.ok) { UI.toast("Failed to update.","error"); return; }
+  UI.toast("Profile updated.","success");
+  document.getElementById("pName").textContent = res.session.fullName;
+});
+
+document.getElementById("pwForm").addEventListener("submit", (e) => {
+  e.preventDefault();
+  const oldPw = document.getElementById("oldPw").value;
+  const newPw = document.getElementById("newPw").value;
+  const conf  = document.getElementById("confPw").value;
+  if (newPw.length < 8) { UI.toast("New password must be at least 8 characters.","error"); return; }
+  if (newPw !== conf) { UI.toast("Passwords do not match.","error"); return; }
+  const res = Auth.changePassword(oldPw, newPw);
+  if (!res.ok) { UI.toast(res.error,"error"); return; }
+  UI.toast("Password updated.","success");
+  e.target.reset();
+});
+</script>
+</body>
+</html>

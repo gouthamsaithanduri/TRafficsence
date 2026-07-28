@@ -1,0 +1,74 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Settings · TrafficSense AI</title>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="css/style.css" />
+</head>
+<body>
+<div id="app-shell"></div>
+<template id="page-tpl">
+  <div class="grid g-2-eq">
+    <div class="card">
+      <div class="section-title"><h2>Appearance</h2></div>
+      <div class="flex items-center justify-between mb-2">
+        <div><b>Theme</b><div class="text-soft" style="font-size:13px;">Light or dark mode</div></div>
+        <button class="btn" id="theme">🌓 Toggle</button>
+      </div>
+      <div class="flex items-center justify-between">
+        <div><b>Units</b><div class="text-soft" style="font-size:13px;">Metric / Imperial</div></div>
+        <select class="form-control" id="units" style="width:auto;">
+          <option value="metric">Metric (km, m)</option>
+          <option value="imperial">Imperial (mi, ft)</option>
+        </select>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="section-title"><h2>Notifications</h2></div>
+      <label class="flex items-center justify-between mb-2"><span>Peak-hour alerts</span><input type="checkbox" id="n1" checked /></label>
+      <label class="flex items-center justify-between mb-2"><span>Congestion warnings</span><input type="checkbox" id="n2" checked /></label>
+      <label class="flex items-center justify-between mb-2"><span>Weekly report email (simulated)</span><input type="checkbox" id="n3" /></label>
+      <button class="btn btn-primary mt-2" id="saveNotif">Save preferences</button>
+    </div>
+  </div>
+
+  <div class="card mt-3">
+    <div class="section-title"><h2>Danger zone</h2></div>
+    <p class="text-soft">Reset all local data — roads, surveys and preferences. Your account remains.</p>
+    <button class="btn" id="reset" style="border-color:var(--bad);color:var(--bad);">Reset app data</button>
+  </div>
+</template>
+
+<script src="js/auth.js"></script><script src="js/app.js"></script><script src="js/shell.js"></script>
+<script>
+Auth.requireAuth();
+buildShell({ title:"Settings", subtitle:"Preferences and data", active:"settings.html", content: document.getElementById("page-tpl").innerHTML });
+
+const stored = JSON.parse(localStorage.getItem("tsai_settings") || "{}");
+document.getElementById("units").value = stored.units || "metric";
+document.getElementById("n1").checked = stored.n1 !== false;
+document.getElementById("n2").checked = stored.n2 !== false;
+document.getElementById("n3").checked = !!stored.n3;
+
+document.getElementById("theme").onclick = () => { UI.toggleTheme(); UI.toast("Theme switched.", "success", 1400); };
+document.getElementById("units").onchange = (e) => { stored.units = e.target.value; localStorage.setItem("tsai_settings", JSON.stringify(stored)); UI.toast("Units updated.", "success"); };
+document.getElementById("saveNotif").onclick = () => {
+  stored.n1 = document.getElementById("n1").checked;
+  stored.n2 = document.getElementById("n2").checked;
+  stored.n3 = document.getElementById("n3").checked;
+  localStorage.setItem("tsai_settings", JSON.stringify(stored));
+  UI.toast("Notification preferences saved.", "success");
+};
+document.getElementById("reset").onclick = () => {
+  if (!confirm("Reset all TrafficSense app data?")) return;
+  localStorage.removeItem("tsai_roads");
+  localStorage.removeItem("tsai_surveys");
+  localStorage.removeItem("tsai_settings");
+  UI.toast("App data reset.", "success");
+};
+</script>
+</body>
+</html>

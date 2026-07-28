@@ -1,0 +1,61 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Dashboard · TrafficSense AI</title>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+<link rel="stylesheet" href="css/style.css" />
+</head>
+<body>
+<div id="app-shell"></div>
+
+<template id="page-tpl">
+  <div class="kpi-grid mb-3">
+    <div class="card kpi card-hover"><span class="ico">🛣️</span><div class="label">Roads Analyzed</div><div class="value" id="kpi-roads">—</div><div class="delta up">+3 this week</div></div>
+    <div class="card kpi accent card-hover"><span class="ico">📋</span><div class="label">Active Surveys</div><div class="value" id="kpi-surveys">—</div><div class="delta up">+12%</div></div>
+    <div class="card kpi card-hover"><span class="ico">🚗</span><div class="label">Current Volume (veh/hr)</div><div class="value" id="kpi-vol">—</div><div class="delta up">+4.2%</div></div>
+    <div class="card kpi warn card-hover"><span class="ico">⏰</span><div class="label">Peak Hour Traffic</div><div class="value" id="kpi-peak">—</div><div class="delta down">18:00</div></div>
+    <div class="card kpi card-hover"><span class="ico">💨</span><div class="label">Average Speed (km/h)</div><div class="value" id="kpi-speed">—</div><div class="delta down">-2.1</div></div>
+    <div class="card kpi accent card-hover"><span class="ico">📊</span><div class="label">Capacity Utilization</div><div class="value" id="kpi-util">—</div><div class="delta up">+6%</div></div>
+    <div class="card kpi bad card-hover"><span class="ico">🎯</span><div class="label">Level of Service</div><div class="value" id="kpi-los">—</div><div class="delta">Corridor avg</div></div>
+    <div class="card kpi warn card-hover"><span class="ico">🚨</span><div class="label">Congestion Score</div><div class="value" id="kpi-cong">—</div><div class="delta down">Higher is worse</div></div>
+  </div>
+
+  <div class="grid g-2 mb-3">
+    <div class="card">
+      <div class="section-title"><h2>Hourly Traffic Volume</h2><span class="text-muted">Today · Main St</span></div>
+      <div class="chart-wrap"><canvas id="chart-hourly"></canvas></div>
+    </div>
+    <div class="card">
+      <div class="section-title"><h2>Vehicle Distribution</h2></div>
+      <div class="chart-wrap"><canvas id="chart-veh"></canvas></div>
+    </div>
+  </div>
+
+  <div class="grid g-2-eq mb-3">
+    <div class="card">
+      <div class="section-title"><h2>Daily Traffic (last 7 days)</h2></div>
+      <div class="chart-wrap sm"><canvas id="chart-daily"></canvas></div>
+    </div>
+    <div class="card">
+      <div class="section-title"><h2>Weekly Traffic Trend</h2></div>
+      <div class="chart-wrap sm"><canvas id="chart-weekly"></canvas></div>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="section-title"><h2>Congestion Hotspots</h2><span class="text-muted">Live map</span></div>
+    <div id="mapCanvas"></div>
+  </div>
+</template>
+
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script src="js/auth.js"></script>
+<script src="js/app.js"></script>
+<script src="js/shell.js"></script>
+<script src="js/dashboard.js"></script>
+</body>
+</html>

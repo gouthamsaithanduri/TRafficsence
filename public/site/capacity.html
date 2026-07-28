@@ -1,0 +1,114 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Capacity Analysis · TrafficSense AI</title>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="css/style.css" />
+</head>
+<body>
+<div id="app-shell"></div>
+<template id="page-tpl">
+  <div class="card mb-3">
+    <div class="section-title"><h2>Select Corridor</h2></div>
+    <div class="form-row">
+      <div class="form-group"><label>Road</label><select id="roadSel" class="form-control"></select></div>
+      <div class="form-group"><label>Analysis Date</label><input type="date" id="date" class="form-control" /></div>
+    </div>
+  </div>
+
+  <div class="kpi-grid mb-3">
+    <div class="card kpi"><span class="ico">🚗</span><div class="label">Traffic Volume (PCU/hr)</div><div class="value" id="vol">—</div></div>
+    <div class="card kpi accent"><span class="ico">🛣️</span><div class="label">Road Capacity (PCU/hr)</div><div class="value" id="cap">—</div></div>
+    <div class="card kpi warn"><span class="ico">📊</span><div class="label">V/C Ratio</div><div class="value" id="vc">—</div></div>
+    <div class="card kpi"><span class="ico">⏰</span><div class="label">Peak Hour Volume</div><div class="value" id="phv">—</div></div>
+    <div class="card kpi"><span class="ico">📈</span><div class="label">Peak Hour Factor</div><div class="value" id="phf">—</div></div>
+    <div class="card kpi accent"><span class="ico">📅</span><div class="label">Average Daily Traffic</div><div class="value" id="adt">—</div></div>
+    <div class="card kpi warn"><span class="ico">🚏</span><div class="label">Queue Length (m)</div><div class="value" id="queue">—</div></div>
+    <div class="card kpi bad"><span class="ico">⏱️</span><div class="label">Avg. Delay (sec/veh)</div><div class="value" id="delay">—</div></div>
+    <div class="card kpi"><span class="ico">💨</span><div class="label">Avg. Speed (km/h)</div><div class="value" id="speed">—</div></div>
+    <div class="card kpi bad"><span class="ico">🎯</span><div class="label">Level of Service</div><div class="value" id="los">—</div></div>
+  </div>
+
+  <div class="grid g-2-eq">
+    <div class="card">
+      <div class="section-title"><h2>V/C Ratio Gauge</h2></div>
+      <div class="gauge">
+        <svg viewBox="0 0 200 120">
+          <path d="M20 110 A80 80 0 0 1 180 110" fill="none" stroke="#e2e8f0" stroke-width="20" stroke-linecap="round"/>
+          <path id="gaugeArc" d="M20 110 A80 80 0 0 1 180 110" fill="none" stroke="url(#gg)" stroke-width="20" stroke-linecap="round" stroke-dasharray="251.3" stroke-dashoffset="251.3"/>
+          <defs><linearGradient id="gg" x1="0" x2="1"><stop offset="0" stop-color="#10b981"/><stop offset="0.5" stop-color="#f59e0b"/><stop offset="1" stop-color="#ef4444"/></linearGradient></defs>
+        </svg>
+        <div class="val" id="gaugeVal">—</div>
+        <div class="lbl">Volume / Capacity</div>
+      </div>
+    </div>
+    <div class="card">
+      <div class="section-title"><h2>Hourly Volume vs Capacity</h2></div>
+      <div class="chart-wrap"><canvas id="chart"></canvas></div>
+    </div>
+  </div>
+</template>
+
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+<script src="js/auth.js"></script><script src="js/app.js"></script><script src="js/shell.js"></script>
+<script>
+Auth.requireAuth();
+buildShell({ title: "Capacity Analysis", subtitle: "Volume/Capacity, PHF, delay and Level of Service", active: "capacity.html", content: document.getElementById("page-tpl").innerHTML });
+
+const roads = TSAI.getRoads();
+document.getElementById("roadSel").innerHTML = roads.map(r => `<option value="${r.id}">${r.road} — ${r.project}</option>`).join("");
+document.getElementById("date").value = new Date().toISOString().slice(0, 10);
+
+let chart;
+function analyze() {
+  const road = roads.find(r => r.id === +document.getElementById("roadSel").value);
+  const capPerLane = TSAI.capacityPerLane(road.type);
+  const capacity = capPerLane * road.lanes;
+  const hourly = TSAI.hourlyCurve(capacity * 0.55, road.id);
+  const phv = Math.max(...hourly);
+  const q4 = [phv, hourly[hourly.indexOf(phv) - 1] || phv * .9, hourly[hourly.indexOf(phv) + 1] || phv * .9, phv * .85];
+  const phf = phv / (4 * Math.max(...q4));
+  const adt = Math.round(hourly.reduce((a, b) => a + b, 0));
+  const vc = +(phv / capacity).toFixed(2);
+  const queue = Math.round(Math.max(0, (vc - 0.7)) * 200);
+  const delay = Math.round(10 + Math.pow(Math.max(0, vc), 2) * 45);
+  const speed = Math.round(road.speed * Math.max(0.35, 1 - vc * 0.55));
+  const los = TSAI.losFromVC(vc);
+
+  const set = (id, v) => document.getElementById(id).textContent = v;
+  set("vol", Math.round(hourly[new Date().getHours()]).toLocaleString());
+  set("cap", capacity.toLocaleString());
+  set("vc", vc);
+  set("phv", phv.toLocaleString());
+  set("phf", phf.toFixed(2));
+  set("adt", adt.toLocaleString());
+  set("queue", queue);
+  set("delay", delay);
+  set("speed", speed);
+  document.getElementById("los").innerHTML = `<span class="los-badge los-${los}">${los}</span>`;
+
+  const pct = Math.min(1, vc);
+  document.getElementById("gaugeArc").style.strokeDashoffset = 251.3 * (1 - pct);
+  document.getElementById("gaugeVal").textContent = vc;
+
+  applyChartTheme();
+  if (chart) chart.destroy();
+  chart = new Chart(document.getElementById("chart"), {
+    type: "bar",
+    data: {
+      labels: [...Array(24).keys()].map(h => h + ":00"),
+      datasets: [
+        { type: "line", label: "Capacity", data: Array(24).fill(capacity), borderColor: "#ef4444", borderDash: [6,6], borderWidth: 2, pointRadius: 0 },
+        { label: "Volume", data: hourly, backgroundColor: hourly.map(v => v > capacity ? "#ef4444" : v > capacity * 0.8 ? "#f97316" : v > capacity * 0.55 ? "#f59e0b" : "#10b981"), borderRadius: 6 }
+      ]
+    },
+    options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { position: "bottom" } } }
+  });
+}
+document.getElementById("roadSel").addEventListener("change", analyze);
+analyze();
+</script>
+</body>
+</html>

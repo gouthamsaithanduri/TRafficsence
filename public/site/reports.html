@@ -1,0 +1,115 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Reports · TrafficSense AI</title>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="css/style.css" />
+</head>
+<body>
+<div id="app-shell"></div>
+<template id="page-tpl">
+  <div class="card mb-3">
+    <div class="section-title">
+      <h2>Traffic Analysis Report</h2>
+      <div class="flex gap-2">
+        <button class="btn" onclick="window.print()">🖨️ Print</button>
+        <button class="btn btn-primary" id="pdf">📄 Export PDF</button>
+        <button class="btn btn-accent" id="xls">📊 Export Excel/CSV</button>
+      </div>
+    </div>
+    <div class="form-row">
+      <div class="form-group"><label>Road</label><select id="roadSel" class="form-control"></select></div>
+      <div class="form-group"><label>Report Date</label><input type="date" id="date" class="form-control" /></div>
+    </div>
+  </div>
+
+  <div class="card mb-3" id="report">
+    <h2 id="rTitle">Report</h2>
+    <p class="text-soft" id="rMeta">—</p>
+
+    <h3>1. Traffic Survey Summary</h3>
+    <table class="table"><tbody id="tSurvey"></tbody></table>
+
+    <h3 class="mt-3">2. Capacity Analysis</h3>
+    <table class="table"><tbody id="tCap"></tbody></table>
+
+    <h3 class="mt-3">3. Peak Demand Analysis</h3>
+    <table class="table"><tbody id="tPeak"></tbody></table>
+
+    <h3 class="mt-3">4. Congestion Analysis</h3>
+    <p id="tCong"></p>
+
+    <h3 class="mt-3">5. AI Recommendations</h3>
+    <ul id="tReco"></ul>
+  </div>
+</template>
+
+<script src="js/auth.js"></script><script src="js/app.js"></script><script src="js/shell.js"></script>
+<script>
+Auth.requireAuth();
+buildShell({ title:"Reports", subtitle:"Generate and export professional analysis reports", active:"reports.html", content: document.getElementById("page-tpl").innerHTML });
+
+const roads = TSAI.getRoads();
+document.getElementById("roadSel").innerHTML = roads.map(r => `<option value="${r.id}">${r.road} — ${r.project}</option>`).join("");
+document.getElementById("date").value = new Date().toISOString().slice(0, 10);
+
+function build() {
+  const road = roads.find(r => r.id === +document.getElementById("roadSel").value);
+  const surveys = TSAI.getSurveys().filter(s => s.roadId === road.id);
+  const cap = TSAI.capacityPerLane(road.type) * road.lanes;
+  const hourly = TSAI.hourlyCurve(cap * 0.6, road.id);
+  const phv = Math.max(...hourly), amHour = 6 + hourly.slice(6,11).indexOf(Math.max(...hourly.slice(6,11)));
+  const pmHour = 16 + hourly.slice(16,21).indexOf(Math.max(...hourly.slice(16,21)));
+  const vc = +(phv/cap).toFixed(2);
+  const los = TSAI.losFromVC(vc);
+
+  document.getElementById("rTitle").textContent = "Traffic Analysis Report — " + road.road;
+  document.getElementById("rMeta").textContent = `${road.project} · ${road.type} · ${road.lanes} lanes · ${document.getElementById("date").value}`;
+
+  document.getElementById("tSurvey").innerHTML = surveys.length
+    ? surveys.map(s => `<tr><td>${s.date}</td><td>${s.period}</td><td>Total ${s.cars+s.motorcycles+s.buses+s.trucks+s.rickshaws+s.bicycles}</td><td>PCU ${TSAI.surveyPCU(s)}</td></tr>`).join("")
+    : "<tr><td>No surveys on file for this road.</td></tr>";
+
+  document.getElementById("tCap").innerHTML = `
+    <tr><td>Capacity (PCU/hr)</td><td><b>${cap.toLocaleString()}</b></td></tr>
+    <tr><td>Peak Hour Volume</td><td><b>${phv.toLocaleString()}</b></td></tr>
+    <tr><td>V/C Ratio</td><td><b>${vc}</b></td></tr>
+    <tr><td>Level of Service</td><td><span class="los-badge los-${los}">${los}</span></td></tr>
+    <tr><td>ADT</td><td>${hourly.reduce((a,b)=>a+b,0).toLocaleString()}</td></tr>`;
+
+  document.getElementById("tPeak").innerHTML = `
+    <tr><td>Morning Peak</td><td>${amHour}:00</td></tr>
+    <tr><td>Evening Peak</td><td>${pmHour}:00</td></tr>
+    <tr><td>Highest Demand</td><td>${hourly.indexOf(phv)}:00 — ${phv.toLocaleString()}</td></tr>
+    <tr><td>Lowest Demand</td><td>${hourly.indexOf(Math.min(...hourly))}:00 — ${Math.min(...hourly).toLocaleString()}</td></tr>`;
+
+  document.getElementById("tCong").innerHTML = `${TSAI.congestionPill(vc)} — corridor operates at V/C ${vc}. ${vc>1?"Demand exceeds capacity, severe congestion expected during peak hours.":vc>0.8?"Approaching capacity with heavy congestion in peaks.":vc>0.55?"Moderate congestion; monitor peak periods.":"Free flow conditions with acceptable delay."}`;
+
+  const recos = [];
+  if (vc > 0.85) recos.push("Additional lane or road widening to increase capacity.");
+  if (vc > 0.6)  recos.push("Signal timing optimization at major junctions.");
+  if (vc > 1.0)  recos.push("Grade-separated crossing (flyover/underpass) at bottleneck.");
+  if (vc > 0.7)  recos.push("Introduce dedicated bus lane for higher person-throughput.");
+  if (recos.length === 0) recos.push("No structural intervention required — maintain periodic monitoring.");
+  document.getElementById("tReco").innerHTML = recos.map(r => `<li>${r}</li>`).join("");
+}
+document.getElementById("roadSel").onchange = build;
+build();
+
+document.getElementById("pdf").onclick = () => window.print();
+document.getElementById("xls").onclick = () => {
+  const road = roads.find(r => r.id === +document.getElementById("roadSel").value);
+  const surveys = TSAI.getSurveys().filter(s => s.roadId === road.id);
+  const rows = [["Date","Period","Cars","Motorcycles","Buses","Trucks","Rickshaws","Bicycles","PCU"]];
+  surveys.forEach(s => rows.push([s.date,s.period,s.cars,s.motorcycles,s.buses,s.trucks,s.rickshaws,s.bicycles,TSAI.surveyPCU(s)]));
+  const csv = rows.map(r => r.join(",")).join("\n");
+  const blob = new Blob([csv], { type: "text/csv" });
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(blob); a.download = `traffic-report-${road.road.replace(/\s+/g,'_')}.csv`; a.click();
+  UI.toast("CSV exported.", "success");
+};
+</script>
+</body>
+</html>

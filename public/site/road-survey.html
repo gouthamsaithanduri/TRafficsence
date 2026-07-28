@@ -1,0 +1,109 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Road Survey · TrafficSense AI</title>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+<link rel="stylesheet" href="css/style.css" />
+</head>
+<body>
+<div id="app-shell"></div>
+
+<template id="page-tpl">
+  <div class="grid g-2">
+    <div class="card">
+      <div class="section-title"><h2>New Road Project</h2></div>
+      <form id="road-form">
+        <div class="form-row">
+          <div class="form-group"><label>Project Name</label><input class="form-control" id="project" required /></div>
+          <div class="form-group"><label>Road Name</label><input class="form-control" id="road" required /></div>
+        </div>
+        <div class="form-row">
+          <div class="form-group">
+            <label>Road Type</label>
+            <select class="form-control" id="type">
+              <option>Urban Arterial</option><option>Highway</option><option>Expressway</option>
+              <option>Collector</option><option>Local</option>
+            </select>
+          </div>
+          <div class="form-group"><label>Speed Limit (km/h)</label><input class="form-control" id="speed" type="number" value="50" /></div>
+        </div>
+        <div class="form-row">
+          <div class="form-group"><label># Lanes</label><input class="form-control" id="lanes" type="number" value="4" min="1" /></div>
+          <div class="form-group"><label>Lane Width (m)</label><input class="form-control" id="laneWidth" type="number" step="0.1" value="3.5" /></div>
+          <div class="form-group"><label>Road Width (m)</label><input class="form-control" id="width" type="number" step="0.1" value="14" /></div>
+        </div>
+        <div class="form-row">
+          <div class="form-group"><label>Latitude</label><input class="form-control" id="lat" type="number" step="0.0001" value="12.9716" /></div>
+          <div class="form-group"><label>Longitude</label><input class="form-control" id="lng" type="number" step="0.0001" value="77.5946" /></div>
+        </div>
+        <div class="form-group"><label>Upload Road Photos</label><input class="form-control" id="photos" type="file" accept="image/*" multiple /></div>
+        <button class="btn btn-primary mt-2" type="submit">Save Road Project</button>
+      </form>
+    </div>
+    <div class="card">
+      <div class="section-title"><h2>Location Preview</h2></div>
+      <div id="mapCanvas" style="height:340px;"></div>
+      <div id="photoPreview" class="grid g-3 mt-2"></div>
+    </div>
+  </div>
+
+  <div class="card mt-3">
+    <div class="section-title"><h2>All Road Projects</h2></div>
+    <table class="table">
+      <thead><tr><th>Project</th><th>Road</th><th>Type</th><th>Lanes</th><th>Width</th><th>Speed</th><th>GPS</th></tr></thead>
+      <tbody id="rows"></tbody>
+    </table>
+  </div>
+</template>
+
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script src="js/auth.js"></script><script src="js/app.js"></script><script src="js/shell.js"></script>
+<script>
+Auth.requireAuth();
+buildShell({ title: "Road Survey", subtitle: "Register roads for capacity and traffic analysis", active: "road-survey.html", content: document.getElementById("page-tpl").innerHTML });
+
+const map = L.map("mapCanvas").setView([12.9716, 77.5946], 13);
+L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", { attribution: "© OSM" }).addTo(map);
+let marker = L.marker([12.9716, 77.5946]).addTo(map);
+map.on("click", (e) => {
+  marker.setLatLng(e.latlng);
+  document.getElementById("lat").value = e.latlng.lat.toFixed(4);
+  document.getElementById("lng").value = e.latlng.lng.toFixed(4);
+});
+
+function renderRows() {
+  const rs = TSAI.getRoads();
+  document.getElementById("rows").innerHTML = rs.map(r => `
+    <tr><td>${r.project}</td><td>${r.road}</td><td>${r.type}</td><td>${r.lanes}</td><td>${r.width} m</td><td>${r.speed} km/h</td><td>${r.lat.toFixed(3)}, ${r.lng.toFixed(3)}</td></tr>
+  `).join("");
+}
+renderRows();
+
+document.getElementById("photos").addEventListener("change", (e) => {
+  const box = document.getElementById("photoPreview"); box.innerHTML = "";
+  [...e.target.files].slice(0, 6).forEach(f => {
+    const url = URL.createObjectURL(f);
+    box.innerHTML += `<img src="${url}" style="width:100%;height:80px;object-fit:cover;border-radius:10px;border:1px solid var(--border);" />`;
+  });
+});
+
+document.getElementById("road-form").addEventListener("submit", (e) => {
+  e.preventDefault();
+  const v = id => document.getElementById(id).value.trim();
+  const road = {
+    id: Date.now(),
+    project: v("project"), road: v("road"), type: v("type"),
+    lanes: +v("lanes"), laneWidth: +v("laneWidth"), width: +v("width"),
+    speed: +v("speed"), lat: +v("lat"), lng: +v("lng"),
+  };
+  if (!road.project || !road.road) { UI.toast("Project and road names are required.", "error"); return; }
+  const rs = TSAI.getRoads(); rs.push(road); TSAI.saveRoads(rs);
+  UI.toast("Road project saved.", "success");
+  renderRows(); e.target.reset();
+});
+</script>
+</body>
+</html>

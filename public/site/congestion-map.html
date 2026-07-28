@@ -1,0 +1,66 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Congestion Map · TrafficSense AI</title>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+<link rel="stylesheet" href="css/style.css" />
+</head>
+<body>
+<div id="app-shell"></div>
+<template id="page-tpl">
+  <div class="card mb-3">
+    <div class="section-title">
+      <h2>Traffic Density Map</h2>
+      <div class="flex gap-2" style="flex-wrap:wrap;">
+        <span class="pill pill-ok">● Free flow</span>
+        <span class="pill pill-warn">● Moderate</span>
+        <span class="pill pill-heavy">● Heavy</span>
+        <span class="pill pill-bad">● Severe</span>
+      </div>
+    </div>
+    <div class="flex gap-2 mb-2" style="flex-wrap:wrap;">
+      <label><input type="checkbox" id="l-cong" checked /> Congestion zones</label>
+      <label><input type="checkbox" id="l-acc" checked /> Accident locations</label>
+      <label><input type="checkbox" id="l-con" checked /> Construction areas</label>
+      <label><input type="checkbox" id="l-sig" checked /> Traffic signals</label>
+    </div>
+    <div id="map" style="height:560px;border-radius:14px;overflow:hidden;border:1px solid var(--border);"></div>
+  </div>
+</template>
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script src="js/auth.js"></script><script src="js/app.js"></script><script src="js/shell.js"></script>
+<script>
+Auth.requireAuth();
+buildShell({ title: "Congestion Map", subtitle: "Live density, hotspots and incidents", active: "congestion-map.html", content: document.getElementById("page-tpl").innerHTML });
+
+const map = L.map("map").setView([12.9716, 77.5946], 12);
+L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png",{attribution:"© OSM"}).addTo(map);
+
+const zones = [
+  { lat:12.9716, lng:77.5946, vc:1.10, name:"Main St & 5th" },
+  { lat:12.9352, lng:77.6245, vc:0.65, name:"Ring Rd Jct 3" },
+  { lat:12.9760, lng:77.6033, vc:0.92, name:"MG Rd Central" },
+  { lat:12.9500, lng:77.5800, vc:0.42, name:"Park Ave" },
+  { lat:12.9900, lng:77.6100, vc:1.25, name:"Airport Rd" },
+  { lat:12.9600, lng:77.5900, vc:0.72, name:"Market Sq" },
+];
+const acc = [ {lat:12.9720,lng:77.5960,note:"Minor collision"}, {lat:12.9820,lng:77.6050,note:"Cleared 10:20"} ];
+const con = [ {lat:12.9450,lng:77.5850,note:"Utility works"}, {lat:12.9880,lng:77.6080,note:"Metro construction"} ];
+const sig = [ {lat:12.9700,lng:77.5940}, {lat:12.9750,lng:77.6020}, {lat:12.9380,lng:77.6220}, {lat:12.9600,lng:77.5905} ];
+
+const color = vc => vc <= 0.55 ? "#10b981" : vc <= 0.8 ? "#f59e0b" : vc <= 1.0 ? "#f97316" : "#ef4444";
+
+const g = { cong: L.layerGroup().addTo(map), acc: L.layerGroup().addTo(map), con: L.layerGroup().addTo(map), sig: L.layerGroup().addTo(map) };
+zones.forEach(z => L.circle([z.lat,z.lng],{radius:400,color:color(z.vc),fillColor:color(z.vc),fillOpacity:.35,weight:2}).bindPopup(`<b>${z.name}</b><br/>V/C: ${z.vc} — LOS ${TSAI.losFromVC(z.vc)}`).addTo(g.cong));
+acc.forEach(a => L.marker([a.lat,a.lng]).bindPopup("🚨 Accident: " + a.note).addTo(g.acc));
+con.forEach(c => L.circleMarker([c.lat,c.lng],{radius:8,color:"#a855f7",fillColor:"#a855f7",fillOpacity:.7}).bindPopup("🚧 Construction: " + c.note).addTo(g.con));
+sig.forEach(s => L.circleMarker([s.lat,s.lng],{radius:5,color:"#0ea5e9",fillColor:"#0ea5e9",fillOpacity:.9}).bindPopup("🚦 Traffic Signal").addTo(g.sig));
+
+const toggle = (id, layer) => document.getElementById(id).addEventListener("change", (e) => e.target.checked ? map.addLayer(layer) : map.removeLayer(layer));
+toggle("l-cong", g.cong); toggle("l-acc", g.acc); toggle("l-con", g.con); toggle("l-sig", g.sig);
+</script>
+</body>
+</html>

@@ -1,0 +1,81 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>AI Recommendations · TrafficSense AI</title>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="css/style.css" />
+</head>
+<body>
+<div id="app-shell"></div>
+<template id="page-tpl">
+  <div class="card mb-3">
+    <div class="section-title">
+      <h2>AI Engineering Recommendations</h2>
+      <div class="flex gap-2">
+        <select id="roadSel" class="form-control" style="width:auto;"></select>
+        <button id="run" class="btn btn-primary">✨ Generate</button>
+      </div>
+    </div>
+    <p class="text-soft" style="margin:0;">Analyzing volume, capacity, LOS and congestion patterns to propose engineering interventions.</p>
+  </div>
+  <div id="recos" class="grid" style="grid-template-columns:1fr;gap:16px;"></div>
+</template>
+
+<script src="js/auth.js"></script><script src="js/app.js"></script><script src="js/shell.js"></script>
+<script>
+Auth.requireAuth();
+buildShell({ title:"AI Recommendations", subtitle:"Actionable engineering interventions", active:"ai-recommendations.html", content: document.getElementById("page-tpl").innerHTML });
+
+const roads = TSAI.getRoads();
+document.getElementById("roadSel").innerHTML = roads.map(r => `<option value="${r.id}">${r.road}</option>`).join("");
+
+const CATALOG = [
+  { key:"widening",  name:"Road Widening",              cost:"$2.4M – $4.8M", improve:"+35% capacity", when: vc => vc > 0.9, prio:"high" },
+  { key:"lane",      name:"Additional Lane",            cost:"$1.6M – $3.2M", improve:"+22% capacity", when: vc => vc > 0.85, prio:"high" },
+  { key:"signal",    name:"Signal Timing Optimization", cost:"$40k – $120k",  improve:"-18% delay",    when: vc => vc > 0.6,  prio:"low" },
+  { key:"flyover",   name:"Flyover",                    cost:"$18M – $32M",   improve:"-60% delay at jct", when: vc => vc > 1.05, prio:"high" },
+  { key:"underpass", name:"Underpass",                  cost:"$12M – $22M",   improve:"-45% delay",    when: vc => vc > 1.0, prio:"med" },
+  { key:"roundabout",name:"Roundabout",                 cost:"$300k – $900k", improve:"-28% delay",    when: vc => vc > 0.7 && vc < 0.95, prio:"med" },
+  { key:"buslane",   name:"Dedicated Bus Lane",         cost:"$500k – $1.2M", improve:"+18% pax throughput", when: vc => vc > 0.7, prio:"med" },
+  { key:"parking",   name:"Parking Management",         cost:"$80k – $300k",  improve:"-12% congestion", when: vc => vc > 0.65, prio:"low" },
+  { key:"oneway",    name:"One-way Traffic System",     cost:"$150k – $500k", improve:"+20% throughput", when: vc => vc > 0.85, prio:"med" },
+];
+
+function render() {
+  const road = roads.find(r => r.id === +document.getElementById("roadSel").value);
+  const cap = TSAI.capacityPerLane(road.type) * road.lanes;
+  const hourly = TSAI.hourlyCurve(cap * 0.6, road.id);
+  const vc = +(Math.max(...hourly) / cap).toFixed(2);
+  const los = TSAI.losFromVC(vc);
+
+  const recos = CATALOG.filter(c => c.when(vc));
+  document.getElementById("recos").innerHTML = `
+    <div class="card">
+      <div class="flex items-center justify-between">
+        <div>
+          <h3 style="margin:0;">${road.road}</h3>
+          <p class="text-soft" style="margin:4px 0 0;">${road.type} · ${road.lanes} lanes · Peak V/C <b>${vc}</b> · LOS <span class="los-badge los-${los}">${los}</span></p>
+        </div>
+        <span class="pill ${vc>1?'pill-bad':vc>0.8?'pill-heavy':vc>0.55?'pill-warn':'pill-ok'}">${vc>1?'Severe':vc>0.8?'Heavy':vc>0.55?'Moderate':'Free Flow'}</span>
+      </div>
+    </div>
+  ` + recos.map(c => `
+    <div class="card reco priority-${c.prio}">
+      <h3>${c.name} <span class="pill ${c.prio==='high'?'pill-bad':c.prio==='med'?'pill-warn':'pill-ok'}">${c.prio.toUpperCase()} priority</span></h3>
+      <p class="text-soft" style="margin:0;">Applies when peak V/C exceeds threshold — current ${vc}.</p>
+      <div class="meta">
+        <div><strong>Problem</strong>${vc>1?'Demand exceeds capacity; queues and severe delay.':'Approaching capacity; delay rising.'}</div>
+        <div><strong>Suggested Solution</strong>${c.name}</div>
+        <div><strong>Expected Improvement</strong>${c.improve}</div>
+        <div><strong>Estimated Cost</strong>${c.cost}</div>
+      </div>
+    </div>
+  `).join("") || `<div class="card"><p>No interventions required — corridor operates within acceptable range.</p></div>`;
+}
+document.getElementById("run").onclick = () => { UI.loader(true); setTimeout(()=>{ UI.loader(false); render(); UI.toast("Recommendations generated.","success"); }, 500); };
+render();
+</script>
+</body>
+</html>
